@@ -1,0 +1,132 @@
+# version: '3.9' # Specifies the version of Docker Compose file syntax used
+
+x-kong-config: # Defines a reusable block of configuration
+  &kong-env # Defines an anchor that captures a set of environment variables commonly used by Kong services.
+  KONG_DATABASE: ${KONG_DATABASE:-off} # Specifies the database type
+  KONG_PG_DATABASE: ${KONG_PG_DATABASE:-kong} # Database name used by Kong
+  KONG_PG_HOST: db # Hostname of PostgreSQL database container
+  KONG_PG_USER: ${KONG_PG_USER:-kong} # PostgreSQL username used by Kong to connect
+  KONG_PG_PASSWORD_FILE: /run/secrets/kong_postgres_password # Location of PostgreSQL password file
+
+volumes: # Defines named volumes and tmpfs (temporary filesystem) mounts for Kong data and configuration
+  kong_data: {} # Persistent volume for PostgreSQL data
+  kong_prefix_vol: # Optional: Temporary volume for Kong's prefix
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+  kong_tmp_vol: # Optional: Temporary volume for Kong's temporary files
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+
+networks: # Configures Docker networks
+  kong-net: # Defines a Docker network named "kong-net" with external false, meaning it's managed by Docker Compose and not externally defined
+    external: false
+
+services:
+  kong-migrations: # Runs migrations for Kong to bootstrap the database schema
+    image: "${KONG_DOCKER_TAG:-kong:latest}" # Specifies the Docker image to use for the services
+    command: kong migrations bootstrap # Executes this to initiliaze the database schema
+    profiles: [ "database" ] # Specifies Docker Compose profiles
+    depends_on: # Declare dependency on the database service
+      - db
+    environment: # Inherits environment variables from &kong_env
+      <<: *kong-env
+    secrets: # Specifies the "kong_postgres_password" secret for accessing PostgreSQL
+      - kong_postgres_password
+    networks: # Attaches to "kong-net" network
+      - kong-net
+    restart: on-failure # Defines restart policy 
+
+  kong-migrations-up: # Executes migrations to apply any outstanding changes to database schema
+    image: "${KONG_DOCKER_TAG:-kong:latest}"
+    command: kong migrations up && kong migrations finish
+    profiles: [ "database" ]
+    depends_on:
+      - db
+    environment:
+      <<: *kong-env
+    secrets:
+      - kong_postgres_password
+    networks:
+      - kong-net
+    restart: on-failure
+
+  kong: # Runs the Kong API Gateway
+    image: "${KONG_DOCKER_TAG:-kong:latest}" # Specifies the Docker image to use for the services
+    user: "${KONG_USER:-kong}" # Specifies the user to run the container
+    environment: # Inherits environment variables from &kong_env and specifies additional environment variables
+      <<: *kong-env
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout # Redirect logs to stdout and stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr # Redirect logs to stdout and stderr
+      KONG_PROXY_LISTEN: "${KONG_PROXY_LISTEN:-0.0.0.0:8000}" # Specifies listening addresses for Kong services
+      KONG_ADMIN_LISTEN: "${KONG_ADMIN_LISTEN:-0.0.0.0:8001}" # Specifies listening addresses for Kong services
+      KONG_ADMIN_GUI_LISTEN: "${KONG_ADMIN_GUI_LISTEN:-0.0.0.0:8002}" # Specifies listening addresses for Kong services
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_PREFIX: ${KONG_PREFIX:-/var/run/kong} # Defines Kong's prefix directory 
+      KONG_DECLARATIVE_CONFIG: "/opt/kong/kong.yaml" # Specifies the location of Kong's declarative configuration file
+    secrets: # Specifies the kong_postgres_password secret for accessing PostgreSQL
+      - kong_postgres_password
+    networks: # Attaches to "kong-net" Docker network
+      - kong-net
+    ports: # Maps ports for Kong services 
+      # The following two environment variables default to an insecure value (0.0.0.0)
+      # according to the CIS Security test.
+      - "${KONG_INBOUND_PROXY_LISTEN:-0.0.0.0}:8000:8000/tcp"
+      - "${KONG_INBOUND_SSL_PROXY_LISTEN:-0.0.0.0}:8443:8443/tcp"
+      # Making them mandatory but undefined, like so would be backwards-breaking:
+      # - "${KONG_INBOUND_PROXY_LISTEN?Missing inbound proxy host}:8000:8000/tcp"
+      # - "${KONG_INBOUND_SSL_PROXY_LISTEN?Missing inbound proxy ssl host}:8443:8443/tcp"
+      # Alternative is deactivating check 5.13 in the security bench, if we consider Kong's own config to be enough security here
+
+      - "127.0.0.1:8001:8001/tcp"
+      - "127.0.0.1:8444:8444/tcp"
+      - "127.0.0.1:8002:8002/tcp"
+    healthcheck: # Defines a health check for Kong container
+      test: [ "CMD", "kong", "health" ]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    restart: on-failure:5 # Specifies restart policy for Kong container
+    read_only: true
+    volumes: # Mounts the volumes for Kong's prefix directory, temporary files('tmpfs') and configuration files
+      - kong_prefix_vol:${KONG_PREFIX:-/var/run/kong}
+      - kong_tmp_vol:/tmp
+      - ./config:/opt/kong
+    security_opt: # Configures security options
+      - no-new-privileges
+
+  db: # Runs PostgreSQL database server
+    image: postgres:9.5 # Specifies the Docker image 
+    profiles: [ "database" ] 
+    environment: # Defines environment variables for PostgreSQL
+      POSTGRES_DB: ${KONG_PG_DATABASE:-kong} # Specifies the PostgreSQL database name
+      POSTGRES_USER: ${KONG_PG_USER:-kong} # Specifies the PostgreSQL database username
+      POSTGRES_PASSWORD_FILE: /run/secrets/kong_postgres_password # Specifies the location of the PostgreSQL password file
+    secrets: # Specifies the "kong_postgres_password" secret for accessing PostgreSQL
+      - kong_postgres_password
+    healthcheck: # Defines a health check to verify PostgreSQL availability
+      test:
+        [
+          "CMD",
+          "pg_isready",
+          "-d",
+          "${KONG_PG_DATABASE:-kong}",
+          "-U",
+          "${KONG_PG_USER:-kong}"
+        ]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+    restart: on-failure # Specifies restart policy
+    stdin_open: true # Enables interactive mode
+    tty: true # Enables interactive mode
+    networks: # Attaches to "kong-net" Docker network
+      - kong-net
+    volumes: # Mounts a persistent volume for storing PostgreSQL data
+      - kong_data:/var/lib/postgresql/data
+
+secrets: # Defines a secret that references file located in the current directory
+  kong_postgres_password:
+    file: ./POSTGRES_PASSWORD
