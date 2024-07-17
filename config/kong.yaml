@@ -1,5 +1,6 @@
 _format_version: "3.0"
-
+consumers:
+- username: burak
 services:
 - connect_timeout: 60000
   enabled: true
