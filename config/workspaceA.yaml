@@ -1,0 +1,229 @@
+_format_version: "3.0"
+_workspace: workspaceA
+consumers:
+- username: userA
+services:
+- connect_timeout: 60000
+  enabled: true
+  host: httpbin.org
+  name: example_service
+  plugins:
+  - config:
+      content_type: application/json
+      custom_fields_by_lua: {}
+      flush_timeout: null
+      headers: {}
+      http_endpoint: http://logstash:8080
+      keepalive: 60000
+      method: POST
+      queue:
+        initial_retry_delay: 0.01
+        max_batch_size: 1
+        max_bytes: null
+        max_coalescing_delay: 1
+        max_entries: 10000
+        max_retry_delay: 60
+        max_retry_time: 60
+      queue_size: null
+      retry_count: null
+      timeout: 10000
+    enabled: true
+    name: http-log
+    protocols:
+    - grpc
+    - grpcs
+    - http
+    - https
+  - config:
+      bandwidth_metrics: true
+      latency_metrics: true
+      per_consumer: false
+      status_code_metrics: true
+      upstream_health_metrics: true
+    enabled: true
+    name: prometheus
+    protocols:
+    - grpc
+    - grpcs
+    - http
+    - https
+  - config:
+      bypass_on_err: false
+      cache_control: false
+      cache_ttl: 300
+      content_type:
+      - text/plain
+      - application/json
+      ignore_uri_case: false
+      memory:
+        dictionary_name: kong_db_cache
+      redis:
+        cluster_addresses: null
+        connect_timeout: null
+        database: 0
+        host: null
+        keepalive_backlog: null
+        keepalive_pool_size: 256
+        password: null
+        port: null
+        read_timeout: null
+        send_timeout: null
+        sentinel_addresses: null
+        sentinel_master: null
+        sentinel_password: null
+        sentinel_role: null
+        sentinel_username: null
+        server_name: null
+        ssl: false
+        ssl_verify: false
+        timeout: 2000
+        username: null
+      request_method:
+      - GET
+      - HEAD
+      response_code:
+      - 200
+      - 301
+      - 404
+      response_headers:
+        X-Cache-Key: true
+        X-Cache-Status: true
+        age: true
+      storage_ttl: null
+      strategy: memory
+      vary_headers: null
+      vary_query_params: null
+    enabled: true
+    name: proxy-cache-advanced
+    protocols:
+    - grpc
+    - grpcs
+    - http
+    - https
+  - config:
+      consumer_groups: null
+      dictionary_name: kong_rate_limiting_counters
+      disable_penalty: false
+      enforce_consumer_groups: false
+      error_code: 429
+      error_message: API rate limit exceeded
+      header_name: null
+      hide_client_headers: false
+      identifier: consumer
+      limit:
+      - 5
+      namespace: Z5j3973FmiFwdX4JK42ejWuGkWcIUJ7k
+      path: null
+      redis:
+        cluster_addresses: null
+        connect_timeout: null
+        database: 0
+        host: null
+        keepalive_backlog: null
+        keepalive_pool_size: 256
+        password: null
+        port: null
+        read_timeout: null
+        send_timeout: null
+        sentinel_addresses: null
+        sentinel_master: null
+        sentinel_password: null
+        sentinel_role: null
+        sentinel_username: null
+        server_name: null
+        ssl: false
+        ssl_verify: false
+        timeout: 2000
+        username: null
+      retry_after_jitter_max: 0
+      strategy: local
+      sync_rate: -1
+      window_size:
+      - 60
+      window_type: sliding
+    enabled: true
+    name: rate-limiting-advanced
+    protocols:
+    - grpc
+    - grpcs
+    - http
+    - https
+  - config:
+      connect_timeout: 2000
+      default_header_type: b3
+      default_service_name: Kong
+      header_type: preserve
+      http_endpoint: http://zipkin:9411/api/v2/spans
+      http_response_header_for_traceid: null
+      http_span_name: method
+      include_credential: true
+      local_service_name: kong
+      phase_duration_flavor: annotations
+      propagation:
+        clear: null
+        default_format: b3
+        extract: null
+        inject: null
+      queue:
+        initial_retry_delay: 0.01
+        max_batch_size: 1
+        max_bytes: null
+        max_coalescing_delay: 1
+        max_entries: 10000
+        max_retry_delay: 60
+        max_retry_time: 60
+      read_timeout: 5000
+      sample_ratio: 1
+      send_timeout: 5000
+      static_tags: null
+      tags_header: Zipkin-Tags
+      traceid_byte_count: 16
+    enabled: true
+    name: zipkin
+    protocols:
+    - grpc
+    - grpcs
+    - http
+    - https
+  port: 80
+  protocol: http
+  read_timeout: 60000
+  retries: 5
+  routes:
+  - https_redirect_status_code: 426
+    name: example_route
+    path_handling: v0
+    paths:
+    - /bin
+    preserve_host: false
+    protocols:
+    - http
+    - https
+    regex_priority: 0
+    request_buffering: true
+    response_buffering: true
+    strip_path: true
+  write_timeout: 60000
+- connect_timeout: 60000
+  enabled: true
+  host: httpbun.com
+  name: service2
+  port: 80
+  protocol: http
+  read_timeout: 60000
+  retries: 5
+  routes:
+  - https_redirect_status_code: 426
+    name: route1
+    path_handling: v0
+    paths:
+    - /bun
+    preserve_host: false
+    protocols:
+    - http
+    - https
+    regex_priority: 0
+    request_buffering: true
+    response_buffering: true
+    strip_path: true
+  write_timeout: 60000

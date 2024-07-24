@@ -1,0 +1,26 @@
+_format_version: "3.0"
+_workspace: workspaceB
+services:
+- connect_timeout: 60000
+  enabled: true
+  host: httpbingo.org
+  name: serviceB
+  port: 80
+  protocol: http
+  read_timeout: 60000
+  retries: 5
+  routes:
+  - https_redirect_status_code: 426
+    name: routeB
+    path_handling: v0
+    paths:
+    - /path
+    preserve_host: false
+    protocols:
+    - http
+    - https
+    regex_priority: 0
+    request_buffering: true
+    response_buffering: true
+    strip_path: true
+  write_timeout: 60000

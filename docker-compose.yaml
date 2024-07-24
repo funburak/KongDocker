@@ -18,14 +18,16 @@ volumes: # Defines named volumes and tmpfs (temporary filesystem) mounts for Kon
     driver_opts:
       type: tmpfs
       device: tmpfs
+  grafana_data: {} # Persistent volume for Grafana data
 
 networks: # Configures Docker networks
   kong-net: # Defines a Docker network named "kong-net" with external false, meaning it's managed by Docker Compose and not externally defined
     external: false
+    driver: bridge
 
 services:
   kong-migrations: # Runs migrations for Kong to bootstrap the database schema
-    image: "${KONG_DOCKER_TAG:-kong:latest}" # Specifies the Docker image to use for the services
+    image: "${KONG_DOCKER_TAG:-kong/kong-gateway:3.7.1.2}" # Specifies the Docker image to use for the services
     command: kong migrations bootstrap # Executes this to initiliaze the database schema
     profiles: [ "database" ] # Specifies Docker Compose profiles
     depends_on: # Declare dependency on the database service
@@ -53,7 +55,7 @@ services:
     restart: on-failure
 
   kong: # Runs the Kong API Gateway
-    image: "${KONG_DOCKER_TAG:-kong:latest}" # Specifies the Docker image to use for the services
+    image: "${KONG_DOCKER_TAG:-kong/kong-gateway:3.7.1.2}" # Specifies the Docker image to use for the services
     user: "${KONG_USER:-kong}" # Specifies the user to run the container
     environment: # Inherits environment variables from &kong_env and specifies additional environment variables
       <<: *kong-env
@@ -126,6 +128,100 @@ services:
       - kong-net
     volumes: # Mounts a persistent volume for storing PostgreSQL data
       - kong_data:/var/lib/postgresql/data
+
+  prometheus: # Prometheus service for monitoring Kong
+    image: prom/prometheus:latest
+    volumes: # Mounts the Prometheus configuration file
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    command: # Specifies the command to run
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    ports:
+      - "9090:9090"
+    networks:
+      - kong-net
+  #   healthcheck: # Defines a health check for Prometheus container
+  #     test: ["CMD", "curl", "-f", "http://localhost:9090/-/ready"]
+  #     interval: 10s
+  #     timeout: 10s
+  #     retries: 5
+
+  grafana: # Grafana service for visualizing Prometheus metrics
+    image: grafana/grafana:latest
+    environment: # Defines environment variables for Grafana
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes: # Mounts a persistent volume for storing Grafana data
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - kong-net
+  #   healthcheck: # Defines a health check for Grafana container
+  #     test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+  #     interval: 10s
+  #     timeout: 10s
+  #     retries: 5
+
+  # elasticsearch: # Elasticsearch service for Kong
+  #   image: docker.elastic.co/elasticsearch/elasticsearch:8.14.3
+  #   environment: 
+  #     - ELASTIC_PASSWORD=changeme # Specifies the Elasticsearch password
+  #     - discovery.type=single-node # Specifies single-node discovery
+  #     - xpack.security.http.ssl.enabled=false # Disables SSL for HTTP
+  #     - xpack.license.self_generated.type=basic # Specifies the license type
+  #   ports:
+  #     - "127.0.0.1:9200:9200"
+  #   networks:
+  #     - kong-net
+  #   mem_limit: 1073741824 # Specifies the memory limit for Elasticsearch container
+  #   # healthcheck: # Defines a health check for Elasticsearch container
+  #   #   test: ["CMD", "curl", "-f", "http://localhost:9200"]
+  #   #   interval: 10s
+  #   #   timeout: 10s
+  #   #   retries: 5
+
+  # kibana: # Kibana service for visualizing Elasticsearch data
+  #   image: docker.elastic.co/kibana/kibana:8.14.3
+  #   environment: # Defines environment variables for Kibana
+  #     - ELASTICSEARCH_URL=http://elasticsearch:9200 # Specifies the Elasticsearch URL
+  #     - ELASTICSEARCH_HOSTS=http://elasticsearch:9200 # Specifies the Elasticsearch hosts
+  #     - ELASTICSEARCH_USERNAME=kibana_system # Specifies the Elasticsearch username
+  #     - ELASTIC_PASSWORD=changeme # Specifies the Elasticsearch password
+  #     - xpack_security_enabled=false # Disables X-Pack security
+  #     - xpack_license_self_generated_type=basic # Specifies the license type
+  #   ports:
+  #     - "5601:5601"
+  #   networks:
+  #     - kong-net
+  #   mem_limit: 1073741824 # Specifies the memory limit for Kibana container
+    # healthcheck: # Defines a health check for Kibana container
+    #   test: ["CMD", "curl", "-f", "http://localhost:5601"]
+    #   interval: 10s
+    #   timeout: 10s
+    #   retries: 5
+    
+  logstash: # Logstash service for processing logs
+    image: docker.elastic.co/logstash/logstash:8.14.3
+    ports: 
+      - "5044:5044"
+    networks:
+      - kong-net
+    volumes: # Mounts a volume for Logstash configuration
+      - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml
+      - ./logstash/pipeline:/usr/share/logstash/pipeline
+    mem_limit: 1073741824 # Specifies the memory limit for Logstash container
+    # healthcheck: # Defines a health check for Logstash container
+    #   test: ["CMD", "curl", "-f", "http://localhost:9600"]
+    #   interval: 10s
+    #   timeout: 10s
+    #   retries: 5
+
+  zipkin: # Zipkin service for distributed tracing
+    image: openzipkin/zipkin:latest
+    ports:
+      - "9411:9411"
+    networks:
+      - kong-net
+    mem_limit: 1073741824 # Specifies the memory limit for Zipkin container
 
 secrets: # Defines a secret that references file located in the current directory
   kong_postgres_password:
